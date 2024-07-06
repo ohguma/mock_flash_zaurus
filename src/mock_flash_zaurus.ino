@@ -92,15 +92,6 @@ void setup() {
   pixels.show();
 }
 
-//帯表示
-void disp_obi(int dot = -1) {
-  for (int i = pos_ok_begin; i < pos_ok_begin + num_ok_range; i++) {
-    if (i != dot) {
-      pixels.setPixelColor(i, color_obi);
-    }
-  }
-}
-
 // 結果表示
 void disp_atari(int start = 0) {
   for (int i = 0; i < NUM_ATARI; i++) {
@@ -130,11 +121,6 @@ void sound_start() {
   delay(1400);
   noTone(PIN_TONE);  //音止める
   delay(100);
-}
-
-// 終了音
-void sound_over() {
-  playMusic(PIN_TONE, marioOver, 180);
 }
 
 //当たり音
@@ -197,26 +183,26 @@ void loop() {
   sound_start();
   num_ok_range = NUM_RANGE_DEFAULT;
   for (h = 0; h < NUM_ATARI; h++) {
-    set_color();
-    pos_ok_begin = 20 + random(8) * 2;
-    //帯オン
     pixels.clear();
+    //帯オン
+    pos_ok_begin = 20 + random(8) * 2;
+    for (int i = pos_ok_begin; i < pos_ok_begin + num_ok_range; i++) {
+      pixels.setPixelColor(i, color_obi);
+    }
     disp_atari();
-    disp_obi();
     pixels.show();
     //ランダム待機
     delay(random(3000) + 500);
     //落下速度決定
-    delay_fall = pow(random(3), 2);
-    //流星開始
+    delay_fall = pow(random(4), 2);
+    //落下開始位置決定
     int pos_start = NUMPIXELS - 1 - random(8) * 3;
+    //流星開始
     for (i = pos_start; i >= NUM_ATARI; i--) {
       if (i < pos_start) {
         //ドット消し
         if (i + 1 >= pos_ok_begin && i + 1 < pos_ok_begin + num_ok_range) {
           pixels.setPixelColor(i + 1, color_obi);
-        } else if (i + 1 < NUM_ATARI) {
-          pixels.setPixelColor(i + 1, color_none);
         } else {
           pixels.setPixelColor(i + 1, 0);
         }
@@ -234,6 +220,7 @@ void loop() {
       // 未回答時のドット位置調整
       i = NUM_ATARI;
     }
+    // ドット色変更
     unsigned long c;
     if (i >= pos_ok_begin && i < pos_ok_begin + num_ok_range) {
       //当たり
@@ -253,18 +240,18 @@ void loop() {
     }
     //ドット移動
     int k;
-    //帯消し
-    if (i > pos_ok_begin && i < pos_ok_begin + num_ok_range) {
-      //ドットが帯の上。
-      k = i;
-    } else if (i <= pos_ok_begin) {
-      //ドットが帯より下。
-      k = pos_ok_begin - 1;
-    }
-    for (j = pos_ok_begin + num_ok_range - 1; j > k; j--) {
-      pixels.setPixelColor(j, 0);
-      pixels.show();
-      delay(delay_move);
+    //ドットより奥に帯が残っていれば削除
+    if (i < pos_ok_begin + num_ok_range) {
+      if (i >= pos_ok_begin) {
+        k = i + 1;
+      } else {
+        k = pos_ok_begin;
+      }
+      for (j = pos_ok_begin + num_ok_range - 1; j >= k; j--) {
+        pixels.setPixelColor(j, 0);
+        pixels.show();
+        delay(delay_move);
+      }
     }
     for (j = i; j > h; j--) {
       //ドット消し
@@ -281,7 +268,7 @@ void loop() {
     num_ok_range--;
     delay(2000);
   }
-
+  //終了音
   if (score == NUM_ATARI) {
     playMusic(PIN_TONE, marioClear, 150);
   } else {
