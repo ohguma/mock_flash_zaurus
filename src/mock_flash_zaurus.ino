@@ -1,7 +1,7 @@
 /*
 フラッシュザウルスもどき
 https://github.com/ohguma/mock_flash_zaurus
-2024-07-03 ohguma
+2024-07-22 ohguma
 
 ■必要パーツ
 ・Arduino Uno等
@@ -28,74 +28,50 @@ https://github.com/lalaso2000/Music/
 
 */
 
+#include "led.h"
+#include "effect.h"
 #include "music.h"
 
-#include <Adafruit_NeoPixel.h>
-
-#define PIN_SW 4       // スタート・回答スイッチピン
-#define PIN_TONE 11    // パッシブブザー接続ピン
-#define PIN_LED 6      // LEDテープ接続ピン
-#define NUMPIXELS 144  // LED数
-Adafruit_NeoPixel pixels(NUMPIXELS, PIN_LED, NEO_GRB + NEO_KHZ800);
-
-#define NUM_RANGE_DEFAULT 15
+#define PIN_SW 4                       // スタート兼回答スイッチピン
+#define NUM_RANGE_DEFAULT 15           // ゲーム開始時の正解ゾーンLED数
 int pos_ok_begin = 20;                 // 正解ゾーン開始位置。実際はランダム配置
 int num_ok_range = NUM_RANGE_DEFAULT;  // 正解ゾーン個数。だんだん減る。
-
-int score = -1;                 // 得点 0～10。-1はまだ誰も挑戦していないとき
-int hi_score = -1;              // ハイスコア
-unsigned long delay_fall = 1;   // ドット落下時待機時間
-unsigned long delay_move = 25;  // ドット移動時待機時間
-int fall_hosei = 0;             //落下速度補正。低得点時の高速落下回避用
-
-int light = 1;              // LED明るさ基準値
-unsigned long color_fall;   // 落下ドット色
-unsigned long color_obi;    // 帯部分の色
-unsigned long color_ok;     // 当たり色
-unsigned long color_ng;     // ハズレ色
-unsigned long color_none;   // 未回答部色
-unsigned long color_hi_ok;  // ハイスコア表示用当たり色
-unsigned long color_hi_ng;  // ハイスコア表示用ハズレ色
+int score = -1;                        // 得点 0～10。-1はまだ誰も挑戦していないとき
+int hi_score = -1;                     // ハイスコア
+unsigned long delay_fall = 1;          // ドット落下時待機時間
+unsigned long delay_move = 25;         // 押した後のドット移動時待機時間
+int fall_hosei = 0;                    // 落下速度補正。低得点時の高速落下回避用
 
 #define NUM_ATARI 10      // 回答数
 int atari[NUM_ATARI];     // 回答状態 0:未回答 1:OK 2:NG
 int hi_atari[NUM_ATARI];  // ハイスコア回答状態 0:未回答 1:OK 2:NG
 
-//規定の色設定
-void set_color() {
-  color_fall = pixels.Color(127, 255, 255);   // 落下ドット色
-  color_obi = pixels.Color(255, 255, 0);    // 帯部分の色
-  color_ok = pixels.Color(0, 255, 0);     // 当たり色
-  color_ng = pixels.Color(255, 0, 0);     // ハズレ色
-  color_none = pixels.Color(255, 255, 255);   // 未回答部色
-  color_hi_ok = pixels.Color(0, 160, 0);  // ハイスコア表示用当たり色
-  color_hi_ng = pixels.Color(160, 0, 0);  // ハイスコア表示用ハズレ色
-}
 
 void setup() {
   Serial.begin(9600);
   pinMode(PIN_SW, INPUT_PULLUP);
+  int light = 3;  // LED明るさ基準値(5段階、1:暗～5:明)
   pixels.begin();
-  pixels.show();
   pixels.setBrightness(light * 4);  // 輝度設定 x/255 (max = 255)
+  delay(1000);
+  set_color();
+  //ハイスコアクリア
   for (int i = 0; i < NUM_ATARI; i++) {
     hi_atari[i] = 0;  //0:未回答,1:OK,2:NG
   }
-  //
+  //スイッチONで明るさ調整
+  unsigned long tm = millis();
   while (digitalRead(PIN_SW) == LOW) {
-    //スイッチONで明るさ調整
-    light = (millis() / 1000) % 5 + 1;
-    pixels.setBrightness(light * 4);  // 輝度調整 x/255 (max = 255)
     pixels.clear();
+    light = ((millis() - tm) / 1000 + 2) % 5 + 1;  //1秒ごとに明るさ基準値変更（3始まり）
+    pixels.setBrightness(light * 4);               // 輝度調整 x/255 (max = 255)
     pixels.setPixelColor(5, pixels.Color(255, 0, 0));
     for (int i = 0; i < light; i++) {
       pixels.setPixelColor(i, pixels.Color(255, 255, 255));
     }
     pixels.show();
-    delay(10);
+    delay(50);
   }
-  delay(500);
-  set_color();
   pixels.clear();
   pixels.show();
 }
@@ -125,71 +101,6 @@ void disp_atari(int start = 0) {
   }
 }
 
-// スタート音
-void sound_start() {
-  // 時報風
-  for (int i = 0; i < 3; i++) {
-    tone(PIN_TONE, 440);
-    pixels.setPixelColor(i, color_ng);
-    pixels.show();
-    delay(100);
-    noTone(PIN_TONE);  //音止める
-    delay(900);
-  }
-  tone(PIN_TONE, 880);
-  for (int i = 0; i < 3; i++) {
-    pixels.setPixelColor(i, 0);
-    pixels.show();
-  }
-  delay(1400);
-  noTone(PIN_TONE);  //音止める
-  delay(100);
-}
-
-//当たり音
-void sound_ok() {
-  tone(PIN_TONE, 440);  //ラ～(440Hz)
-  delay(200);           //1秒間まつ
-  noTone(PIN_TONE);     //音止める
-}
-
-//ハズレ音
-void sound_ng() {
-  tone(PIN_TONE, 110);
-  delay(100);
-  noTone(PIN_TONE);  //音止める
-  delay(100);
-  tone(PIN_TONE, 110);
-  delay(200);
-  noTone(PIN_TONE);  //音止める
-}
-
-// Rainbow-enhanced theater marquee.
-void theaterChaseRainbow(int period) {
-  int wait = 50;
-  int repeat_a = period / wait / 12;
-  int firstPixelHue = 64;               // First pixel starts at red (hue 0)
-  for (int a = 0; a < repeat_a; a++) {  // 
-    for (int b = 0; b < 12; b++) {      //  
-      pixels.clear();                   //   Set all pixels in RAM to 0 (off)
-      for (int c = b; c < pixels.numPixels(); c += 12) {
-        // hue of pixel 'c' is offset by an amount to make one full
-        // revolution of the color wheel (range 65536) along the length
-        // of the strip (strip.numPixels() steps):
-        int hue = firstPixelHue + c * 65536L / pixels.numPixels();
-        uint32_t color = pixels.gamma32(pixels.ColorHSV(hue));  // hue -> RGB
-        pixels.setPixelColor(c, color);                         // Set pixel 'c' to value 'color'
-      }
-      pixels.show();                // Update strip with new contents
-      delay(wait);                  // Pause for a moment
-      firstPixelHue += 65536 / 30;  // One cycle of color wheel over 90 frames
-    }
-  }
-  pixels.clear();
-  pixels.show();
-  delay(1000);
-}
-
 void loop() {
   //theaterChaseRainbow(1000);
   int h, i, j;
@@ -197,14 +108,15 @@ void loop() {
   unsigned long tm = millis();
   unsigned long tm2 = millis();
   long t = 250;   //周期[ms]
-  long p = 100;   //0.5t 時の頂点  x=0.5t時に -x*(x-t) / k = p
+  long p = 110;   //0.5t 時の頂点  x=0.5t時に -x*(x-t) / k = p
   long t2 = 333;  //ハイスコア用周期[ms]
-  long p2 = 100;  //ハイスコア用0.5t 時の頂点  x=0.5t時に -x*(x-t) / k = p
+  long p2 = 110;  //ハイスコア用0.5t 時の頂点  x=0.5t時に -x*(x-t) / k = p
+  //隣接スコアが頂点同士でつながって見えないようにするための+1
   if (score == -1) {
-    p = (random(10) + 1) * 10;
+    p = (random(10) + 1) * (NUM_ATARI + 1);
   } else {
-    p = (score + 1) * 10;
-    p2 = (hi_score + 1) * 10;
+    p = (score + 1) * (NUM_ATARI + 1);
+    p2 = (hi_score + 1) * (NUM_ATARI + 1);
   }
   t = p + 250;
   t2 = p2 + 333;
@@ -264,13 +176,17 @@ void loop() {
     disp_atari();
     pixels.show();
     if (h > 0) {
+      //押されっぱなしの場合、待機
+      while (digitalRead(PIN_SW) == LOW) {
+        delay(10);
+      }
       //ランダム待機
       delay(random(3000) + 500);
     }
     //落下速度決定
     delay_fall = pow(random(4) + fall_hosei, 2);
     //落下開始位置決定
-    int pos_start = NUMPIXELS - 1 - random(8) * 3;
+    int pos_start = LED_NUM_PIXELS - 1 - random(8) * 3;
     //流星開始
     for (i = pos_start; i >= NUM_ATARI; i--) {
       if (i < pos_start) {
@@ -340,8 +256,8 @@ void loop() {
       delay(delay_move);
     }
     num_ok_range--;
-    if (h > NUM_ATARI / 2 && score == 0) {
-      //提督展示の高速回落下避設定
+    if (score == 0 || (h > 0 && atari[h] == 2 && atari[h - 1] == 2)) {
+      //低得点時の高速回落下避設定
       fall_hosei++;
     }
     delay(2000);
@@ -356,7 +272,12 @@ void loop() {
   //終了音
   if (score == NUM_ATARI) {
     playMusic(PIN_TONE, marioClear, 150);
-    theaterChaseRainbow(3000);
+    //theaterChaseRainbow(3000);
+    effect_firework(5);
+    pixels.clear();
+    disp_atari();
+    pixels.show();
+    delay(500);
   } else {
     playMusic(PIN_TONE, marioOver, 150);
   }

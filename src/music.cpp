@@ -99,10 +99,10 @@ note marioDead[] = {
 };
 
 
-void playMusic(int PIN, note notes[], int bpm){
+void playMusic(int PIN, note notes[], int bpm) {
   int i;
   int beat = 240000 / bpm;
-  while(notes[i].pitch != NOTE_END){
+  while (notes[i].pitch != NOTE_END) {
     double noteDuration = beat / notes[i].duration / 1.30;
     tone(PIN, notes[i].pitch, noteDuration);
     double pauseBetweenNotes = noteDuration * 1.30;
