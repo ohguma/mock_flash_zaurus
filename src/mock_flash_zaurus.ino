@@ -184,7 +184,7 @@ void loop() {
       delay(random(3000) + 500);
     }
     //落下速度決定
-    delay_fall = pow(random(4) + fall_hosei, 2);
+    delay_fall = pow((h == 0 ? 4 : random(4)) + fall_hosei + 1, 2);
     //落下開始位置決定
     int pos_start = LED_NUM_PIXELS - 1 - random(8) * 3;
     //流星開始
